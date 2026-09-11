@@ -26,9 +26,9 @@ localStorage, so it survives a reload.
    estimated cost if you filled in prices.
 4. Click **Export PDF** to open the browser's print dialog with only the
    order/cut list visible (no inputs) — pick "Save as PDF" to get a file you
-   can send to your dealer. Page 1 is a plain "what to buy" table (profile,
-   length, quantity, price/subtotal); the visual cutting diagrams follow on
-   the pages after that.
+   can send to your dealer. Page 1 has the "what to buy" table plus the full
+   list of pieces needed; the visual cutting diagrams follow on the pages
+   after that.
 
 ## Algorithm
 
