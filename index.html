@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cutter — wood cutting plan</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+  h1 { font-size: 1.4rem; }
+  h2 { font-size: 1.1rem; margin-top: 2rem; }
+  table { border-collapse: collapse; width: 100%; margin: 0.5rem 0; }
+  th, td { border: 1px solid #ccc; padding: 4px 6px; text-align: left; }
+  input { width: 100%; box-sizing: border-box; border: 1px solid #bbb; padding: 3px; }
+  input[type=number] { width: 6rem; }
+  button { cursor: pointer; padding: 4px 10px; margin: 0.2rem 0.3rem 0.2rem 0; }
+  .rm { color: #b00; background: none; border: none; font-weight: bold; }
+  .bar { display: flex; border: 1px solid #888; height: 1.6rem; margin: 3px 0; font-size: 0.8rem; }
+  .seg { border-right: 2px dashed #fff; background: #7aa6c2; display: flex; align-items: center; justify-content: center; overflow: hidden; white-space: nowrap; color: #fff; }
+  .waste { background: repeating-linear-gradient(45deg, #eee, #eee 4px, #ddd 4px, #ddd 8px); color: #666; }
+  .profile-block { border: 1px solid #ddd; border-radius: 6px; padding: 0.6rem 0.8rem; margin: 0.8rem 0; }
+  .error { color: #b00; }
+  .muted { color: #666; font-size: 0.9em; }
+  #printHeader { display: none; }
+  #buySummary th { background: #eee; }
+  #buySummary td.num, #buySummary th.num { text-align: right; }
+  #buySummary tfoot td { font-weight: bold; border-top: 2px solid #888; }
+  @media print {
+    .no-print { display: none !important; }
+    #printHeader { display: block; }
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .profile-block, .bar-row { break-inside: avoid; }
+    #buySummary { break-after: page; }
+  }
+</style>
+</head>
+<body>
+<h1 class="no-print">Cutter — wood cutting plan</h1>
+<p class="muted no-print">Enter the profiles (cross-sections) you buy, the lengths they're sold in, and the pieces you need to cut. Works for KVH, battens, planks — anything sold in fixed lengths.</p>
+
+<div class="no-print">
+<h2>Settings</h2>
+<label>Unit: <select id="unit"><option value="mm">mm</option><option value="cm" selected>cm</option><option value="m">m</option></select></label>
+&nbsp;&nbsp;
+<label>Saw kerf (cut width): <input type="number" id="kerf" value="3" step="1" style="width:5rem"> mm</label>
+
+<h2>Profiles you can buy</h2>
+<table id="profileTable"><thead><tr><th>Name (e.g. 80x80)</th><th>Available lengths (comma-separated, in the unit above)</th><th>Price per bar (optional)</th><th></th></tr></thead><tbody></tbody></table>
+<button id="addProfile">+ add profile</button>
+
+<h2>Pieces you need to cut</h2>
+<table id="pieceTable"><thead><tr><th>Profile</th><th>Length (in the unit above)</th><th>Qty</th><th>Label (optional)</th><th></th></tr></thead><tbody></tbody></table>
+<button id="addPiece">+ add piece</button>
+</div>
+
+<p class="no-print"><button id="calc" style="font-weight:bold">Calculate</button> <button id="exportPdf">Export PDF</button></p>
+
+<div id="printHeader"><h1>Wood order &amp; cut list</h1><p class="muted"></p></div>
+<div id="buySummary"></div>
+<div id="results"></div>
+
+<script src="packing.js"></script>
+<script>
+const STORAGE_KEY = "cutter-state-v1";
+const state = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null") || {
+  unit: "cm",
+  kerf: 3,
+  profiles: [{ name: "80x80", lengths: "500, 300", price: "" }],
+  pieces: [{ profile: "80x80", length: "250", qty: 4, label: "" }],
+};
+
+function save() {
+  state.unit = document.getElementById("unit").value;
+  state.kerf = Number(document.getElementById("kerf").value) || 0;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function toMm(value) {
+  const f = { mm: 1, cm: 10, m: 1000 }[state.unit];
+  return Math.round(Number(value) * f);
+}
+function fromMm(mm) {
+  const f = { mm: 1, cm: 10, m: 1000 }[state.unit];
+  return +(mm / f).toFixed(3);
+}
+
+function renderProfiles() {
+  const tbody = document.querySelector("#profileTable tbody");
+  tbody.innerHTML = state.profiles.map((p, i) => `
+    <tr>
+      <td><input data-kind="profile" data-i="${i}" data-f="name" value="${p.name}"></td>
+      <td><input data-kind="profile" data-i="${i}" data-f="lengths" value="${p.lengths}"></td>
+      <td><input data-kind="profile" data-i="${i}" data-f="price" value="${p.price}" placeholder="€"></td>
+      <td><button class="rm" data-kind="profile" data-i="${i}">✕</button></td>
+    </tr>`).join("");
+}
+
+function renderPieces() {
+  const tbody = document.querySelector("#pieceTable tbody");
+  const options = state.profiles.map((p) => `<option${p.name === "" ? "" : ""}>${p.name}</option>`).join("");
+  tbody.innerHTML = state.pieces.map((p, i) => `
+    <tr>
+      <td><select data-kind="piece" data-i="${i}" data-f="profile">${state.profiles.map((pr) =>
+        `<option value="${pr.name}" ${pr.name === p.profile ? "selected" : ""}>${pr.name}</option>`).join("")}</select></td>
+      <td><input type="number" step="any" data-kind="piece" data-i="${i}" data-f="length" value="${p.length}"></td>
+      <td><input type="number" data-kind="piece" data-i="${i}" data-f="qty" value="${p.qty}"></td>
+      <td><input data-kind="piece" data-i="${i}" data-f="label" value="${p.label}"></td>
+      <td><button class="rm" data-kind="piece" data-i="${i}">✕</button></td>
+    </tr>`).join("");
+}
+
+document.getElementById("unit").value = state.unit;
+document.getElementById("kerf").value = state.kerf;
+renderProfiles();
+renderPieces();
+
+document.getElementById("addProfile").onclick = () => {
+  state.profiles.push({ name: "", lengths: "", price: "" });
+  renderProfiles(); renderPieces(); save();
+};
+document.getElementById("addPiece").onclick = () => {
+  state.pieces.push({ profile: state.profiles[0]?.name || "", length: "", qty: 1, label: "" });
+  renderPieces(); save();
+};
+
+document.body.addEventListener("input", (e) => {
+  const { kind, i, f } = e.target.dataset;
+  if (kind === "profile") { state.profiles[i][f] = e.target.value; if (f === "name") renderPieces(); }
+  if (kind === "piece") state.pieces[i][f] = e.target.value;
+  save();
+});
+document.body.addEventListener("click", (e) => {
+  if (!e.target.classList.contains("rm")) return;
+  const { kind, i } = e.target.dataset;
+  if (kind === "profile") { state.profiles.splice(i, 1); renderProfiles(); renderPieces(); }
+  if (kind === "piece") { state.pieces.splice(i, 1); renderPieces(); }
+  save();
+});
+
+function calculate() {
+  save();
+  const out = document.getElementById("results");
+  const summaryEl = document.getElementById("buySummary");
+  out.innerHTML = "";
+  summaryEl.innerHTML = "";
+
+  const buyRows = []; // { profile, length, count, price }
+  const allErrors = []; // { profile, length, label }
+
+  for (const profile of state.profiles) {
+    if (!profile.name) continue;
+    const stockLengths = profile.lengths.split(",").map((s) => s.trim()).filter(Boolean).map(toMm);
+    const pieces = state.pieces
+      .filter((p) => p.profile === profile.name && p.length && p.qty > 0)
+      .map((p) => ({ length: toMm(p.length), qty: Number(p.qty), label: p.label }));
+
+    if (stockLengths.length === 0 || pieces.length === 0) continue;
+
+    const { bars, summary, errors } = planCutting(pieces, stockLengths, state.kerf);
+
+    for (const [len, count] of Object.entries(summary)) {
+      buyRows.push({ profile: profile.name, length: Number(len), count, price: Number(profile.price) || 0 });
+    }
+    for (const e of errors) allErrors.push({ profile: profile.name, length: e.length, label: e.label });
+
+    const block = document.createElement("div");
+    block.className = "profile-block";
+
+    let html = `<h3>${profile.name}</h3>`;
+
+    if (errors.length) {
+      html += `<p class="error">⚠ ${errors.length} piece(s) too long for any available stock length: ${
+        errors.map((e) => fromMm(e.length) + " " + state.unit + (e.label ? " (" + e.label + ")" : "")).join(", ")
+      }</p>`;
+    }
+
+    const totalWaste = bars.reduce((s, b) => s + b.remaining, 0);
+    html += `<p class="muted">${bars.length} bar(s), total offcut waste ≈ ${fromMm(totalWaste)} ${state.unit} (kerf included)</p>`;
+
+    html += "<p><b>Cutting plan:</b></p>";
+    bars.forEach((bar, idx) => {
+      const barMm = bar.stockLength;
+      html += `<div class="muted">Bar ${idx + 1} — ${fromMm(barMm)}${state.unit}</div><div class="bar bar-row">`;
+      for (const cut of bar.cuts) {
+        const pct = (cut.length / barMm) * 100;
+        html += `<div class="seg" style="width:${pct}%" title="${fromMm(cut.length)}${state.unit} ${cut.label}">${fromMm(cut.length)}${cut.label ? " " + cut.label : ""}</div>`;
+      }
+      if (bar.remaining > 0) {
+        const pct = (bar.remaining / barMm) * 100;
+        html += `<div class="seg waste" style="width:${pct}%">${fromMm(bar.remaining)}</div>`;
+      }
+      html += "</div>";
+    });
+
+    block.innerHTML = html;
+    out.appendChild(block);
+  }
+
+  if (buyRows.length) {
+    const hasPrices = buyRows.some((r) => r.price > 0);
+    let total = 0;
+    let rowsHtml = buyRows.map((r) => {
+      const subtotal = r.count * r.price;
+      total += subtotal;
+      return `<tr><td>${r.profile}</td><td class="num">${fromMm(r.length)} ${state.unit}</td><td class="num">${r.count}</td>` +
+        (hasPrices ? `<td class="num">${r.price ? r.price.toFixed(2) : ""}</td><td class="num">${r.price ? subtotal.toFixed(2) : ""}</td>` : "") +
+        "</tr>";
+    }).join("");
+    let errHtml = allErrors.length
+      ? `<p class="error">⚠ ${allErrors.length} piece(s) too long for any available stock length: ${
+          allErrors.map((e) => e.profile + " " + fromMm(e.length) + state.unit + (e.label ? " (" + e.label + ")" : "")).join(", ")
+        }</p>`
+      : "";
+    summaryEl.innerHTML = `<h2>What to buy</h2>${errHtml}<table id="buySummaryTable"><thead><tr>` +
+      `<th>Profile</th><th class="num">Length</th><th class="num">Quantity</th>` +
+      (hasPrices ? `<th class="num">Price/bar</th><th class="num">Subtotal</th>` : "") +
+      `</tr></thead><tbody>${rowsHtml}</tbody>` +
+      (hasPrices ? `<tfoot><tr><td colspan="4">Total</td><td class="num">${total.toFixed(2)}</td></tr></tfoot>` : "") +
+      `</table>`;
+  }
+
+  if (!out.innerHTML && !summaryEl.innerHTML) out.innerHTML = "<p class=\"error\">Nothing to calculate — check profiles and pieces match up.</p>";
+  return out.innerHTML !== "" || summaryEl.innerHTML !== "";
+}
+
+document.getElementById("calc").onclick = calculate;
+document.getElementById("exportPdf").onclick = () => {
+  if (!document.getElementById("results").children.length && !document.getElementById("buySummary").children.length) calculate();
+  document.querySelector("#printHeader p").textContent = "Generated " + new Date().toLocaleDateString();
+  window.print();
+};
+</script>
+</body>
+</html>
