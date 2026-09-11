@@ -30,6 +30,12 @@ node test.js          # run the packing algorithm tests
 Any change to `packing.js` should keep `node test.js` green. There's no build
 step, linter, or CI — keep it that way unless there's a real reason not to.
 
+## Conventions
+
+- Commits: always [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, ...).
+- PR descriptions: under 100 words.
+- Inline code comments: under 30 words each.
+
 ## Design notes / constraints
 
 - No dependencies on purpose (ponytail/YAGNI): no framework, no bundler, no
