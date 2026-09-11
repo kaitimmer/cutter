@@ -98,16 +98,19 @@ function renderProfiles() {
 
 function renderPieces() {
   const tbody = document.querySelector("#pieceTable tbody");
-  const options = state.profiles.map((p) => `<option${p.name === "" ? "" : ""}>${p.name}</option>`).join("");
-  tbody.innerHTML = state.pieces.map((p, i) => `
-    <tr>
-      <td><select data-kind="piece" data-i="${i}" data-f="profile">${state.profiles.map((pr) =>
-        `<option value="${pr.name}" ${pr.name === p.profile ? "selected" : ""}>${pr.name}</option>`).join("")}</select></td>
+  tbody.innerHTML = state.pieces.map((p, i) => {
+    const known = state.profiles.some((pr) => pr.name === p.profile);
+    const opts = state.profiles.map((pr) =>
+        `<option value="${pr.name}" ${pr.name === p.profile ? "selected" : ""}>${pr.name}</option>`).join("")
+      + (known || !p.profile ? "" : `<option value="${p.profile}" selected>⚠ ${p.profile} (missing)</option>`);
+    return `<tr>
+      <td><select data-kind="piece" data-i="${i}" data-f="profile">${opts}</select></td>
       <td><input type="number" step="any" data-kind="piece" data-i="${i}" data-f="length" value="${p.length}"></td>
       <td><input type="number" data-kind="piece" data-i="${i}" data-f="qty" value="${p.qty}"></td>
       <td><input data-kind="piece" data-i="${i}" data-f="label" value="${p.label}"></td>
       <td><button class="rm" data-kind="piece" data-i="${i}">✕</button></td>
-    </tr>`).join("");
+    </tr>`;
+  }).join("");
 }
 
 document.getElementById("unit").value = state.unit;
@@ -135,7 +138,16 @@ document.getElementById("reset").onclick = () => {
 
 document.body.addEventListener("input", (e) => {
   const { kind, i, f } = e.target.dataset;
-  if (kind === "profile") { state.profiles[i][f] = e.target.value; if (f === "name") renderPieces(); }
+  if (kind === "profile") {
+    if (f === "name") {
+      const oldName = state.profiles[i].name;
+      state.profiles[i][f] = e.target.value;
+      state.pieces.forEach((p) => { if (p.profile === oldName) p.profile = e.target.value; });
+      renderPieces();
+    } else {
+      state.profiles[i][f] = e.target.value;
+    }
+  }
   if (kind === "piece") state.pieces[i][f] = e.target.value;
   save();
 });
