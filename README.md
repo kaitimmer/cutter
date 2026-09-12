@@ -19,12 +19,20 @@ localStorage, so it survives a reload.
 
 1. Under **Profiles you can buy**, add each cross-section (e.g. `80x80`,
    `80x40`) and the lengths it comes in (e.g. `500, 300` with unit = cm).
-2. Under **Pieces you need to cut**, list every piece: which profile, what
-   length, how many, optional label.
-3. Click **Calculate**. For each profile you get: how many bars of each
+2. Under **Projects**, each project keeps its own cut list but shares the
+   profiles above. Add a project, optionally copying pieces from an existing
+   one to reuse what's already there, then tweak/add pieces for the new job.
+   Pick the active project with the radio button; the **Pieces you need to
+   cut** table always edits the active project.
+3. Under **Pieces you need to cut**, list every piece for the active
+   project: which profile, what length, how many, optional label.
+4. Click **Calculate**. For each profile you get: how many bars of each
    length to buy, a visual cutting diagram per bar, offcut waste, and an
-   estimated cost if you filled in prices.
-4. Click **Export PDF** to open the browser's print dialog with only the
+   estimated cost if you filled in prices. Tick **Combine all projects into
+   one full order** (shown once you have 2+ projects) to get one combined
+   order/cutlist across every project — cut pieces are labelled with which
+   project they belong to.
+5. Click **Export PDF** to open the browser's print dialog with only the
    order/cut list visible (no inputs) — pick "Save as PDF" to get a file you
    can send to your dealer. Page 1 has the "what to buy" table plus the full
    list of pieces needed; the visual cutting diagrams follow on the pages

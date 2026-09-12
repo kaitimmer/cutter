@@ -11,6 +11,7 @@
   th, td { border: 1px solid #ccc; padding: 4px 6px; text-align: left; }
   input { width: 100%; box-sizing: border-box; border: 1px solid #bbb; padding: 3px; }
   input[type=number] { width: 6rem; }
+  input[type=checkbox], input[type=radio] { width: auto; vertical-align: middle; }
   button { cursor: pointer; padding: 4px 10px; margin: 0.2rem 0.3rem 0.2rem 0; }
   .rm { color: #b00; background: none; border: none; font-weight: bold; }
   .bar { display: flex; border: 1px solid #888; height: 1.6rem; margin: 3px 0; font-size: 0.8rem; }
@@ -47,12 +48,20 @@
 <table id="profileTable"><thead><tr><th>Name (e.g. 80x80)</th><th>Available lengths (comma-separated, in the unit above)</th><th>Price per bar (optional)</th><th></th></tr></thead><tbody></tbody></table>
 <button id="addProfile">+ add profile</button>
 
+<h2>Projects</h2>
+<p class="muted">Each project has its own cut list, but shares the profiles above. Start a new project empty or copy the pieces from an existing one to reuse what's already there.</p>
+<table id="projectTable"><thead><tr><th>Active</th><th>Project name</th><th></th></tr></thead><tbody></tbody></table>
+<label>Copy pieces from: <select id="copyFrom" style="width:auto;display:inline-block"><option value="">(start empty)</option></select></label>
+<button id="addProject">+ new project</button>
+
 <h2>Pieces you need to cut</h2>
+<p class="muted">Editing: <span id="activeProjectName"></span></p>
 <table id="pieceTable"><thead><tr><th>Profile</th><th>Length (in the unit above)</th><th>Qty</th><th>Label (optional)</th><th></th></tr></thead><tbody></tbody></table>
 <button id="addPiece">+ add piece</button>
 </div>
 
 <p class="no-print"><button id="calc" style="font-weight:bold">Calculate</button> <button id="exportPdf">Export PDF</button> <button id="reset" class="rm" style="font-weight:normal">Reset to defaults</button></p>
+<p class="no-print" id="combineRow"><label><input type="checkbox" id="combineAll"> Combine all projects into one full order</label></p>
 
 <div id="printHeader"><h1>Wood order &amp; cut list</h1><p class="muted"></p></div>
 <div id="buySummary"></div>
@@ -66,14 +75,27 @@ function defaults() {
     unit: "cm",
     kerf: 3,
     profiles: [{ name: "80x80", lengths: "500, 300", price: "" }],
-    pieces: [{ profile: "80x80", length: "250", qty: 4, label: "" }],
+    projects: [{ id: "p1", name: "Project 1", pieces: [{ profile: "80x80", length: "250", qty: 4, label: "" }] }],
+    activeProjectId: "p1",
+    combineAll: false,
   };
 }
 const state = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null") || defaults();
+// migrate pre-projects state (v1: a single top-level `pieces` list)
+if (!state.projects) {
+  state.projects = [{ id: "p1", name: "Project 1", pieces: state.pieces || [] }];
+  state.activeProjectId = "p1";
+  state.combineAll = false;
+  delete state.pieces;
+}
+function activeProject() {
+  return state.projects.find((p) => p.id === state.activeProjectId) || state.projects[0];
+}
 
 function save() {
   state.unit = document.getElementById("unit").value;
   state.kerf = Number(document.getElementById("kerf").value) || 0;
+  state.combineAll = document.getElementById("combineAll").checked;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
@@ -98,8 +120,10 @@ function renderProfiles() {
 }
 
 function renderPieces() {
+  const proj = activeProject();
+  document.getElementById("activeProjectName").textContent = proj.name;
   const tbody = document.querySelector("#pieceTable tbody");
-  tbody.innerHTML = state.pieces.map((p, i) => {
+  tbody.innerHTML = proj.pieces.map((p, i) => {
     const known = state.profiles.some((pr) => pr.name === p.profile);
     const opts = state.profiles.map((pr) =>
         `<option value="${pr.name}" ${pr.name === p.profile ? "selected" : ""}>${pr.name}</option>`).join("")
@@ -114,9 +138,24 @@ function renderPieces() {
   }).join("");
 }
 
+function renderProjects() {
+  const tbody = document.querySelector("#projectTable tbody");
+  tbody.innerHTML = state.projects.map((p, i) => `
+    <tr>
+      <td><input type="radio" name="activeProject" data-kind="project" data-i="${i}" data-f="active" ${p.id === state.activeProjectId ? "checked" : ""}></td>
+      <td><input data-kind="project" data-i="${i}" data-f="name" value="${p.name}"></td>
+      <td>${state.projects.length > 1 ? `<button class="rm" data-kind="project" data-i="${i}">✕</button>` : ""}</td>
+    </tr>`).join("");
+  document.getElementById("copyFrom").innerHTML = `<option value="">(start empty)</option>` +
+    state.projects.map((p) => `<option value="${p.id}">${p.name}</option>`).join("");
+  document.getElementById("combineRow").style.display = state.projects.length > 1 ? "" : "none";
+}
+
 document.getElementById("unit").value = state.unit;
 document.getElementById("kerf").value = state.kerf;
+document.getElementById("combineAll").checked = state.combineAll;
 renderProfiles();
+renderProjects();
 renderPieces();
 
 document.getElementById("addProfile").onclick = () => {
@@ -124,15 +163,25 @@ document.getElementById("addProfile").onclick = () => {
   renderProfiles(); renderPieces(); save();
 };
 document.getElementById("addPiece").onclick = () => {
-  state.pieces.push({ profile: state.profiles[0]?.name || "", length: "", qty: 1, label: "" });
+  activeProject().pieces.push({ profile: state.profiles[0]?.name || "", length: "", qty: 1, label: "" });
   renderPieces(); save();
 };
+document.getElementById("addProject").onclick = () => {
+  const name = prompt("Project name?", "Project " + (state.projects.length + 1));
+  if (!name) return;
+  const source = state.projects.find((p) => p.id === document.getElementById("copyFrom").value);
+  const id = (crypto.randomUUID && crypto.randomUUID()) || "p" + Date.now();
+  state.projects.push({ id, name, pieces: source ? JSON.parse(JSON.stringify(source.pieces)) : [] });
+  state.activeProjectId = id;
+  renderProjects(); renderPieces(); save();
+};
 document.getElementById("reset").onclick = () => {
-  if (!confirm("Reset all profiles, pieces and settings to defaults?")) return;
+  if (!confirm("Reset all profiles, projects and settings to defaults?")) return;
   Object.assign(state, defaults());
   document.getElementById("unit").value = state.unit;
   document.getElementById("kerf").value = state.kerf;
-  renderProfiles(); renderPieces(); save();
+  document.getElementById("combineAll").checked = state.combineAll;
+  renderProfiles(); renderProjects(); renderPieces(); save();
   document.getElementById("results").innerHTML = "";
   document.getElementById("buySummary").innerHTML = "";
 };
@@ -143,22 +192,46 @@ document.body.addEventListener("input", (e) => {
     if (f === "name") {
       const oldName = state.profiles[i].name;
       state.profiles[i][f] = e.target.value;
-      state.pieces.forEach((p) => { if (p.profile === oldName) p.profile = e.target.value; });
+      state.projects.forEach((proj) => proj.pieces.forEach((p) => { if (p.profile === oldName) p.profile = e.target.value; }));
       renderPieces();
     } else {
       state.profiles[i][f] = e.target.value;
     }
   }
-  if (kind === "piece") state.pieces[i][f] = e.target.value;
+  if (kind === "piece") activeProject().pieces[i][f] = e.target.value;
+  if (kind === "project") {
+    if (f === "active") { state.activeProjectId = state.projects[i].id; renderPieces(); }
+    if (f === "name") {
+      state.projects[i].name = e.target.value;
+      const opt = document.querySelector(`#copyFrom option[value="${state.projects[i].id}"]`);
+      if (opt) opt.textContent = e.target.value;
+      if (state.projects[i].id === state.activeProjectId) document.getElementById("activeProjectName").textContent = e.target.value;
+    }
+  }
   save();
 });
 document.body.addEventListener("click", (e) => {
   if (!e.target.classList.contains("rm")) return;
   const { kind, i } = e.target.dataset;
   if (kind === "profile") { state.profiles.splice(i, 1); renderProfiles(); renderPieces(); }
-  if (kind === "piece") { state.pieces.splice(i, 1); renderPieces(); }
+  if (kind === "piece") { activeProject().pieces.splice(i, 1); renderPieces(); }
+  if (kind === "project") {
+    const removedId = state.projects[i].id;
+    state.projects.splice(i, 1);
+    if (state.activeProjectId === removedId) state.activeProjectId = state.projects[0].id;
+    renderProjects(); renderPieces();
+  }
   save();
 });
+
+function getPiecesForCalc() {
+  const combine = state.combineAll && state.projects.length > 1;
+  if (!combine) return activeProject().pieces;
+  // fold project name into the label so combined cutlists/bars show which project each piece belongs to
+  return state.projects.flatMap((proj) =>
+    proj.pieces.map((p) => ({ ...p, label: (p.label ? p.label + " " : "") + `(${proj.name})` }))
+  );
+}
 
 function calculate() {
   save();
@@ -166,6 +239,7 @@ function calculate() {
   const summaryEl = document.getElementById("buySummary");
   out.innerHTML = "";
   summaryEl.innerHTML = "";
+  const calcPieces = getPiecesForCalc();
 
   const buyRows = []; // { profile, length, count, price }
   const allErrors = []; // { profile, length, label }
@@ -173,7 +247,7 @@ function calculate() {
   for (const profile of state.profiles) {
     if (!profile.name) continue;
     const stockLengths = profile.lengths.split(",").map((s) => s.trim()).filter(Boolean).map(toMm);
-    const pieces = state.pieces
+    const pieces = calcPieces
       .filter((p) => p.profile === profile.name && p.length && p.qty > 0)
       .map((p) => ({ length: toMm(p.length), qty: Number(p.qty), label: p.label }));
 
@@ -242,9 +316,9 @@ function calculate() {
       `</table>`;
   }
 
-  const neededPieces = state.pieces.filter((p) => p.profile && p.length && p.qty > 0);
+  const neededPieces = calcPieces.filter((p) => p.profile && p.length && p.qty > 0);
   if (neededPieces.length) {
-    summaryEl.innerHTML += `<h2>Pieces needed</h2><table><thead><tr>` +
+    summaryEl.innerHTML += `<h2>Pieces needed${state.combineAll && state.projects.length > 1 ? " (all projects)" : ""}</h2><table><thead><tr>` +
       `<th>Profile</th><th class="num">Length</th><th class="num">Qty</th><th>Label</th></tr></thead><tbody>` +
       neededPieces.map((p) =>
         `<tr><td>${p.profile}</td><td class="num">${p.length} ${state.unit}</td><td class="num">${p.qty}</td><td>${p.label || ""}</td></tr>`

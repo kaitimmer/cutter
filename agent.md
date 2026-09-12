@@ -41,6 +41,13 @@ step, linter, or CI — keep it that way unless there's a real reason not to.
 - No dependencies on purpose (ponytail/YAGNI): no framework, no bundler, no
   PDF library. PDF export uses `window.print()` with a `@media print`
   stylesheet — good enough, zero deps.
+- Profiles (the wood catalog) are shared across all projects; each project
+  only has its own `pieces` list. Renaming a profile updates the reference in
+  every project's pieces, not just the active one.
+- "Combine all projects" (checkbox, shown once there are 2+ projects) merges
+  every project's pieces before running `planCutting`, folding the project
+  name into each piece's label so the combined cutlist/PDF still shows which
+  project each cut belongs to.
 - The packing algorithm is a heuristic, not an optimal solver (cutting stock
   is NP-hard). It can occasionally suggest one extra bar for tricky
   quantities. Acceptable for a workshop cut list; upgrade to ILP/column
@@ -49,5 +56,6 @@ step, linter, or CI — keep it that way unless there's a real reason not to.
   deliberate, small overestimate so the tool never tells you to buy too
   little material.
 - Default unit is `cm`.
-- PDF layout: page 1 is a plain "what to buy" summary table across all
-  profiles (`break-after: page`); cutting diagrams follow per profile.
+- PDF layout: page 1 is a plain "what to buy" summary table plus the
+  "pieces needed" list across all profiles (`break-after: page`); cutting
+  diagrams follow per profile.
