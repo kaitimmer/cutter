@@ -60,7 +60,7 @@
 <button id="addPiece">+ add piece</button>
 </div>
 
-<p class="no-print"><button id="calc" style="font-weight:bold">Calculate</button> <button id="exportPdf">Export PDF</button> <button id="exportSettings">Export settings</button> <button id="importSettings">Import settings</button><input type="file" id="importFile" accept="application/json" style="display:none"> <button id="reset" class="rm" style="font-weight:normal">Reset to defaults</button></p>
+<p class="no-print"><button id="calc" style="font-weight:bold">Calculate</button> <button id="exportPdf">Export PDF</button> <button id="copyBuyList">Copy order as text</button> <button id="exportSettings">Export settings</button> <button id="importSettings">Import settings</button><input type="file" id="importFile" accept="application/json" style="display:none"> <button id="reset" class="rm" style="font-weight:normal">Reset to defaults</button></p>
 <p class="no-print" id="combineRow"><label><input type="checkbox" id="combineAll"> Combine all projects into one full order</label></p>
 
 <div id="printHeader"><h1>Wood order &amp; cut list</h1><p class="muted"></p></div>
@@ -299,7 +299,7 @@ function calculate() {
     let rowsHtml = buyRows.map((r) => {
       const subtotal = r.count * r.price;
       total += subtotal;
-      return `<tr><td>${r.profile}</td><td class="num">${fromMm(r.length)} ${state.unit}</td><td class="num">${r.count}</td>` +
+      return `<tr><td>${r.profile}</td><td class="num">${r.count}</td><td class="num">${fromMm(r.length)} ${state.unit}</td>` +
         (hasPrices ? `<td class="num">${r.price ? r.price.toFixed(2) : ""}</td><td class="num">${r.price ? subtotal.toFixed(2) : ""}</td>` : "") +
         "</tr>";
     }).join("");
@@ -309,7 +309,7 @@ function calculate() {
         }</p>`
       : "";
     summaryEl.innerHTML = `<h2>What to buy</h2>${errHtml}<table id="buySummaryTable"><thead><tr>` +
-      `<th>Profile</th><th class="num">Length</th><th class="num">Quantity</th>` +
+      `<th>Profile</th><th class="num">Quantity</th><th class="num">Length</th>` +
       (hasPrices ? `<th class="num">Price/bar</th><th class="num">Subtotal</th>` : "") +
       `</tr></thead><tbody>${rowsHtml}</tbody>` +
       (hasPrices ? `<tfoot><tr><td colspan="4">Total</td><td class="num">${total.toFixed(2)}</td></tr></tfoot>` : "") +
@@ -362,6 +362,20 @@ document.getElementById("exportPdf").onclick = () => {
   if (!document.getElementById("results").children.length && !document.getElementById("buySummary").children.length) calculate();
   document.querySelector("#printHeader p").textContent = "Generated " + new Date().toLocaleDateString();
   window.print();
+};
+document.getElementById("copyBuyList").onclick = (e) => {
+  const table = document.getElementById("buySummaryTable");
+  if (!table) { calculate(); }
+  const t = document.getElementById("buySummaryTable");
+  if (!t) { alert("Nothing to copy — add pieces and calculate first."); return; }
+  const rows = [...t.querySelectorAll("tr")].map((tr) => [...tr.children].map((c) => c.textContent.trim()));
+  const widths = rows[0].map((_, i) => Math.max(...rows.map((r) => (r[i] || "").length)));
+  const text = rows.map((r) => r.map((c, i) => c.padEnd(widths[i])).join("  ").trimEnd()).join("\n");
+  navigator.clipboard.writeText(text).then(() => {
+    const original = e.target.textContent;
+    e.target.textContent = "Copied!";
+    setTimeout(() => { e.target.textContent = original; }, 1500);
+  });
 };
 </script>
 <p class="no-print muted"><a href="https://github.com/kaitimmer/cutter">Source code on GitHub</a></p>
